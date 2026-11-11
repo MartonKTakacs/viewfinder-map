@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Viewfinder Map — camera field-of-view planner</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
@@ -115,7 +115,52 @@
   table.health td{padding:2px 3px;border-top:1px solid var(--line)}
   .filebtn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:5px;padding:4px 8px;cursor:pointer;background:#2b3036;color:var(--text)}
   .filebtn input{display:none}
-  @media (max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:55vh 1fr}#mapwrap{order:-1}}
+  #sheetBar{display:none}
+  @media (max-width:800px), (pointer:coarse) and (max-height:600px){
+    #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+    #mapwrap{flex:1 1 auto;min-height:0;order:-1}
+    #side{flex:none;height:46vh;height:46dvh;padding:0 10px 60px;border-right:0;border-top:1px solid var(--line);transition:height .2s}
+    #app.collapsed #side{height:40px;overflow:hidden;padding-bottom:0}
+    #sheetBar{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:6;background:var(--panel);padding:6px 0 4px;margin:0 -10px;padding-left:10px;padding-right:10px}
+    #sheetBar .grab{width:36px;height:4px;border-radius:2px;background:#555;margin:0 auto}
+    #sheetBar button{min-height:30px;padding:2px 10px;font-size:12px}
+    #sheetBar h1{margin:0;font-size:14px;flex:1}
+    #side h1:not(#sheetBar h1),#side .sub{display:none}
+    .tabs{top:40px}
+    .tabs button{min-height:36px}
+    .row{grid-template-columns:96px 1fr}
+    .row.three{grid-template-columns:96px 1fr 70px}
+    input,select,textarea{font-size:16px;min-height:36px}
+    input[type=range]{min-height:28px}
+    input[type=checkbox]{width:20px;height:20px}
+    button,.filebtn{min-height:36px}
+    .chips button,.shot button,.item button{min-height:30px;padding:2px 8px}
+    #toolbar{left:6px;top:6px;right:auto;max-width:calc(100% - 12px);gap:3px}
+    #toolbar button{min-height:38px;min-width:38px;padding:4px 7px;font-size:15px}
+    #toolbar .tl{display:none}
+    #toolbar .sep{display:none}
+    .leaflet-control-zoom{display:none}
+    #imgbadge{display:none}
+    #hud{top:auto;bottom:6px;right:6px;left:auto;min-width:0;max-width:56%;font-size:10.5px;padding:5px 8px;max-height:34vh;overflow:auto}
+    #hud.mini > *:not(:first-child){display:none}
+    #hud.mini .readout > div:nth-child(n+9){display:none}
+    #hud::after{content:'tap for more';display:block;color:var(--dim);font-size:9.5px;text-align:right;margin-top:2px}
+    #hud:not(.mini)::after{content:'tap to shrink'}
+    #legend{bottom:6px;left:6px;right:auto;font-size:10px;padding:4px 7px}
+    #status{bottom:auto;top:52px;left:6px;max-width:calc(100% - 12px);font-size:11px;padding:4px 7px}
+    #mapwrap.hinted #status{top:112px}
+    #handleHint{bottom:auto;top:52px;font-size:11px;max-width:calc(100% - 12px);white-space:normal;padding:6px 8px;gap:6px}
+    #view3d{left:6px;right:6px;width:auto;min-width:0;bottom:6px}
+    #view3d.big{top:50px;bottom:6px}
+    #profile{left:6px;right:6px;bottom:6px;height:150px}
+    #mapwrap.prof #legend,#mapwrap.prof #hud{bottom:162px}
+    .vf-h{width:56px;height:56px;margin:-28px 0 0 -28px}
+    .vf-h .dot{left:19px;top:19px} .vf-h.aim .dot,.vf-h.sun .dot{left:17px;top:17px}
+    .vf-h .lbl{left:28px;top:28px}
+    .vf-cam{width:52px;height:52px;margin:-26px 0 0 -26px} .vf-cam .camicon{left:14px;top:15px;font-size:24px}
+    .leaflet-popup-content{min-width:200px;max-width:80vw}
+  }
+  @media (max-width:800px){ .vf-h .lbl{font-size:11px} }
   #view3d{position:absolute;left:10px;bottom:60px;z-index:1001;width:46%;min-width:320px;background:#0d0f11;border:1px solid var(--line);border-radius:8px;display:none;box-shadow:0 6px 30px rgba(0,0,0,.5)}
   #view3d.on{display:block}
   #mapwrap.prof #view3d:not(.big){bottom:262px}
@@ -138,11 +183,17 @@
   .hourtip{background:transparent!important;border:0!important;box-shadow:none!important;color:#ffd400!important;font-size:10px;padding:0!important}
   .hourtip:before{display:none}
   .shotmk{width:22px;height:22px;border-radius:50%;color:#111;font:700 11px/22px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 0 3px #000}
+  @page{size:A4 portrait;margin:12mm}
   @media print{
-    #side,#toolbar,#legend,#status,#imgbadge,#hud,#view3d,#profile,.leaflet-control-zoom{display:none!important}
-    #app{display:block;height:auto}
-    #mapwrap{height:62vh;page-break-after:avoid}
-    #printSheet{display:block;color:#000;font:11px/1.35 sans-serif;padding:8px}
+    #side,#toolbar,#legend,#status,#imgbadge,#hud,#view3d,#profile,#handleHint,#sheetBar,.leaflet-control-zoom,.vf-h{display:none!important}
+    html,body{width:186mm;height:auto}
+    #app{display:block;height:auto;width:186mm}
+    #mapwrap{position:relative;width:186mm;height:150mm;page-break-after:avoid;page-break-inside:avoid;border:0.3mm solid #999}
+    #printSheet{display:block;color:#000;font:9.5pt/1.35 sans-serif;padding:3mm 0 0;width:186mm}
+    #printSheet h2{font-size:14pt}
+    #printSheet pre{font-size:9pt!important}
+    #printSheet table{font-size:8.5pt;page-break-inside:auto}
+    #printSheet tr{page-break-inside:avoid}
     #printSheet table{border-collapse:collapse;width:100%}
     #printSheet td,#printSheet th{border:1px solid #999;padding:2px 4px;text-align:left}
     html,body{background:#fff}
@@ -152,6 +203,7 @@
 <body>
 <div id="app">
 <aside id="side">
+  <div id="sheetBar"><h1>Viewfinder <span>Map</span></h1><button id="sheetToggle" title="Show or hide the settings panel">▾ Hide</button></div>
   <h1>Viewfinder <span>Map</span></h1>
   <div class="sub">Place the camera, set body, sensor mode and lens, and see what lands in frame, with buildings, terrain and trees blocking the view.</div>
   <div class="tabs"><button data-tab="shot" class="on">Shot</button><button data-tab="data">Data sources</button><button data-tab="info">Shots &amp; info</button></div>
@@ -378,12 +430,12 @@
   <div id="map" tabindex="0"></div>
   <div id="handleHint" style="display:none"><span>Drag <b>🎥</b> to move · drag <b style="color:#ff8a1e">●</b> to turn &amp; change focal length · drag <b style="color:#00e5e5">◎</b> to aim &amp; focus · drag <b style="color:#ffd400">☀</b> along its path to change the time</span><button id="hintOk">Got it</button></div>
   <div id="toolbar">
-    <button data-tool="camera" title="Click the map to drop the camera there (or just drag the camera)">📷 Place</button>
-    <button data-tool="inspect" title="Click to inspect a point or building">🔍 Inspect</button>
-    <button data-tool="obstacle" title="Draw an obstacle (set build, crane, truck…): click corners, click the first point to finish">✏️ Obstacle</button>
+    <button data-tool="camera" title="Click the map to drop the camera there (or just drag the camera)">📷 <span class="tl">Place</span></button>
+    <button data-tool="inspect" title="Click to inspect a point or building">🔍 <span class="tl">Inspect</span></button>
+    <button data-tool="obstacle" title="Draw an obstacle (set build, crane, truck…): click corners, click the first point to finish">✏️ <span class="tl">Obstacle</span></button>
     <span class="sep"></span>
-    <button id="btn3d" title="First-person 3D viewfinder">🎥 3D</button>
-    <button id="btnProfile" title="Elevation / sightline profile along the lens axis">📈 Profile</button>
+    <button id="btn3d" title="First-person 3D viewfinder">🎥 <span class="tl">3D</span></button>
+    <button id="btnProfile" title="Elevation / sightline profile along the lens axis">📈 <span class="tl">Profile</span></button>
     <button id="btnGps" title="Put the camera at your current GPS position">📍</button>
     <button id="btnCompass" title="Aim with your phone: live heading & tilt from the phone's sensors (https only)">🧭</button>
   </div>
@@ -2219,8 +2271,8 @@ function setLbl(m, txt, side, ux, uy) {   // label beside the dot, perpendicular
   const el = m.getElement(); if (!el) return; const l = el.querySelector('.lbl'); l.textContent = txt;
   const w = l.offsetWidth || 60, h = l.offsetHeight || 16;
   let px = -uy * side, py = ux * side; if (py > 0.2 || (Math.abs(py) <= 0.2 && px < 0)) { px = -px; py = -py; } if (side < 0) { px = -px; py = -py; }
-  const r = 20 + Math.abs(px) * w / 2 + Math.abs(py) * h / 2;
-  l.style.left = (22 + px * r) + 'px'; l.style.top = (22 + py * r) + 'px';
+  const r = 20 + Math.abs(px) * w / 2 + Math.abs(py) * h / 2, c = el.firstChild.offsetWidth / 2 || 22;
+  l.style.left = (c + px * r) + 'px'; l.style.top = (c + py * r) + 'px';
 }
 function placeHandles(O) {
   if (!map._loaded) return;
@@ -2283,8 +2335,8 @@ function placeSunHandle(sun) {
   const c = map.latLngToContainerPoint([S.lat, S.lon]), q = map.latLngToContainerPoint(sunHandle.getLatLng());
   const dx = q.x - c.x, dy = q.y - c.y, n = Math.hypot(dx, dy) || 1;
   if (el) { const l = el.querySelector('.lbl'); l.textContent = `☀ ${t} · ${sun.alt.toFixed(0)}°`;   // label on the inner side (towards the camera) so it stays on screen
-    const ux = dx / n, uy = dy / n, r = 22 + Math.abs(ux) * (l.offsetWidth || 70) / 2 + Math.abs(uy) * (l.offsetHeight || 16) / 2;
-    l.style.left = (22 - ux * r) + 'px'; l.style.top = (22 - uy * r) + 'px'; }
+    const ux = dx / n, uy = dy / n, r = 22 + Math.abs(ux) * (l.offsetWidth || 70) / 2 + Math.abs(uy) * (l.offsetHeight || 16) / 2, c = el.firstChild.offsetWidth / 2 || 22;
+    l.style.left = (c - ux * r) + 'px'; l.style.top = (c - uy * r) + 'px'; }
 }
 sunHandle.on('dragstart', () => {
   dragging = 'sun';
@@ -2302,8 +2354,15 @@ sunHandle.on('drag', e => {
 sunHandle.on('dragend', () => { dragging = null; sunDayTab = null; scheduleCompute(); });
 map.on('zoomend moveend resize', () => { placeHandles(); if (lastResult) placeSunHandle(lastResult.sun); });
 // first-run hint
-try { if (!localStorage.getItem('vfm.hint.handles')) $('handleHint').style.display = 'flex'; } catch (e) {}
-$('hintOk').onclick = () => { $('handleHint').style.display = 'none'; try { localStorage.setItem('vfm.hint.handles', '1'); } catch (e) {} };
+try { if (!localStorage.getItem('vfm.hint.handles')) { $('handleHint').style.display = 'flex'; $('mapwrap').classList.add('hinted'); } } catch (e) {}
+$('hintOk').onclick = () => { $('handleHint').style.display = 'none'; $('mapwrap').classList.remove('hinted'); try { localStorage.setItem('vfm.hint.handles', '1'); } catch (e) {} };
+
+/* mobile: collapsible settings sheet, compact HUD */
+const mobileMQ = window.matchMedia('(max-width:800px)');
+$('sheetToggle').onclick = () => { const c = $('app').classList.toggle('collapsed'); $('sheetToggle').textContent = c ? '▴ Settings' : '▾ Hide'; setTimeout(() => map.invalidateSize(), 220); };
+$('hud').addEventListener('click', () => { if (mobileMQ.matches) $('hud').classList.toggle('mini'); });
+if (mobileMQ.matches) { $('hud').classList.add('mini'); map.doubleClickZoom.enable(); }
+mobileMQ.addEventListener('change', () => setTimeout(() => map.invalidateSize(), 50));
 
 /* Tools */
 let tool = null;
