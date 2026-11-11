@@ -86,6 +86,20 @@
   .leaflet-popup-content td:first-child{color:var(--dim)}
   .vf-canvas{pointer-events:none}
   .camicon{font-size:22px;line-height:22px;text-align:center;filter:drop-shadow(0 0 2px #000)}
+  .vf-h{position:relative;width:44px;height:44px;margin:-22px 0 0 -22px;touch-action:none;cursor:grab}
+  .vf-h:active{cursor:grabbing}
+  .vf-h .dot{position:absolute;left:13px;top:13px;width:18px;height:18px;border-radius:50%;background:#ff8a1e;border:2px solid #fff;box-shadow:0 0 0 1px #000,0 1px 4px rgba(0,0,0,.6)}
+  .vf-h.aim .dot{background:rgba(0,229,229,.25);border:3px solid #00e5e5;left:11px;top:11px;width:22px;height:22px}
+  .vf-h.aim .dot::after{content:'';position:absolute;left:7px;top:7px;width:5px;height:5px;border-radius:50%;background:#00e5e5}
+  .vf-h.aim.clamped .dot{border-style:dashed}
+  .vf-h .lbl{position:absolute;left:36px;top:12px;white-space:nowrap;font:600 11px/1.3 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.72);padding:2px 6px;border-radius:9px;pointer-events:none}
+  .vf-h .lbl.left{left:auto;right:36px}
+  .vf-h .lbl{left:22px;top:22px;transform:translate(-50%,-50%)}
+  .vf-h.aim .lbl{color:#7ff}
+  .vf-cam{position:relative;width:40px;height:40px;margin:-20px 0 0 -20px;cursor:move;touch-action:none}
+  .vf-cam .camicon{position:absolute;left:8px;top:9px}
+  #handleHint{position:absolute;left:0;right:0;margin:0 auto;width:max-content;bottom:60px;z-index:1000;background:rgba(15,17,20,.92);border:1px solid var(--line);color:#eee;font-size:12px;padding:6px 10px 6px 12px;border-radius:16px;display:flex;gap:10px;align-items:center;max-width:92%}
+  #handleHint button{padding:1px 7px;font-size:11px;white-space:nowrap;flex:none}
   .tgticon{width:14px;height:14px;border:2px solid #fff;border-radius:50%;background:rgba(255,80,40,.8);box-shadow:0 0 3px #000}
   .shot,.item{display:flex;gap:4px;align-items:center;margin:3px 0}
   .shot span,.item span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -272,7 +286,9 @@
       <div class="row"><label>Encoding</label><select id="ctEnc"><option value="terrarium">Terrarium</option><option value="mapbox">Mapbox Terrain-RGB</option></select></div>
       <div class="row"><label>Tile size / max z</label><div style="display:flex;gap:4px"><select id="ctSize"><option>256</option><option>512</option></select><input type="number" id="ctMaxZ" min="1" max="20"></div></div>
     </div>
-    <div class="hint">Gaps in the primary source are filled first from coarser zoom levels of the same source, then from the fallback. Imported DTM files (below) override both inside their extent.</div>
+    <div class="row"><label>Smoothing m</label><div style="display:flex;gap:4px;align-items:center"><input type="number" id="terrainSmooth" step="5" min="0" max="100" style="flex:1"><span class="small">0 = off</span></div></div>
+    <div class="row"><label>Error tolerance m</label><div style="display:flex;gap:4px;align-items:center"><input type="number" id="terrainTol" step="0.5" min="0" max="15" style="flex:1"><span class="small">bumps this small never block</span></div></div>
+    <div class="hint">Gaps in the primary source are filled first from coarser zoom levels of the same source, then from the fallback. Imported DTM files (below) override both inside their extent.<br><b>Why flat streets sometimes look blocked:</b> free global elevation (Copernicus GLO-30, EU-DEM, SRTM) is a 25–30 m grid with ±2–5 m error, and in towns it partly includes rooftops. From eye height a 2 m bump 50 m away hides everything behind it. Smoothing removes the grid noise; the tolerance lets terrain bumps smaller than this value never block the view (buildings, trees and your imported DTM/DSM are never relaxed). Raise it in dense cities, set both to 0 with a LiDAR DTM.</div>
   </details>
 
   <details open>
@@ -357,9 +373,9 @@
 
 <div id="mapwrap">
   <div id="map" tabindex="0"></div>
+  <div id="handleHint" style="display:none"><span>Drag <b>🎥</b> to move · drag <b style="color:#ff8a1e">●</b> to turn &amp; change focal length · drag <b style="color:#00e5e5">◎</b> to aim &amp; focus</span><button id="hintOk">Got it</button></div>
   <div id="toolbar">
-    <button data-tool="camera" title="Click map to place the camera">📷 Camera</button>
-    <button data-tool="aim" title="Click map to aim the camera at a point">🎯 Aim</button>
+    <button data-tool="camera" title="Click the map to drop the camera there (or just drag the camera)">📷 Place</button>
     <button data-tool="inspect" title="Click to inspect a point or building">🔍 Inspect</button>
     <button data-tool="obstacle" title="Draw an obstacle (set build, crane, truck…): click corners, click the first point to finish">✏️ Obstacle</button>
     <span class="sep"></span>
@@ -682,7 +698,7 @@ const DEFAULTS = {
   focal: 35, mult: 1, tstop: 2.8, focus: 10, coc: null, breathing: false,
   heading: 90, tilt: 0, roll: 0, aimHeight: 1.6, aimTilt: true, declination: 5.5,
   datetime: null, utcOffset: null, showShadows: false, showSun: true,
-  maxDist: 800, cellMode: 'auto', levelH: 3.2, defaultH: 12, useWoods: false, woodH: 15, useTrees: false, treeH: 10, useRaised: false,
+  maxDist: 800, cellMode: 'auto', terrainSmooth: 20, terrainTol: 2.5, levelH: 3.2, defaultH: 12, useWoods: false, woodH: 15, useTrees: false, treeH: 10, useRaised: false,
   opacity: 0.65, showDof: true, showLos: false, showBuildings: false, showWedge: true,
   // data sources
   imagery: 'osm', overlay: 'none', overlayOpacity: 0.8, baseDim: 0, waybackRelease: '', s2year: 2024,
@@ -942,7 +958,7 @@ const CanvasOverlay = L.ImageOverlay.extend({
 const cvShadow = document.createElement('canvas'), cvBld = document.createElement('canvas'), cvView = document.createElement('canvas');
 let ovShadow = null, ovBld = null, ovView = null;
 
-const camIcon = L.divIcon({ className: '', html: '<div class="camicon">🎥</div>', iconSize: [24, 24], iconAnchor: [12, 12] });
+const camIcon = L.divIcon({ className: '', html: '<div class="vf-cam" title="Drag to move the camera"><div class="camicon">🎥</div></div>', iconSize: [0, 0], iconAnchor: [0, 0] });
 const camMarker = L.marker([S.lat, S.lon], { icon: camIcon, draggable: true, zIndexOffset: 1000, keyboard: false }).addTo(map);
 const tgtIcon = L.divIcon({ className: '', html: '<div class="tgticon"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
 let tgtMarker = null;
@@ -1488,6 +1504,24 @@ function assignHeights() {
   D.stats = st;
 }
 
+function smoothGrid(A, W, H, r) {
+  // two passes of a separable running-mean box filter, edge-clamped; NaN-free input assumed
+  const tmp = new Float32Array(Math.max(W, H)), n = 2 * r + 1;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let j = 0; j < H; j++) {
+      const o = j * W; let acc = 0;
+      for (let k = -r; k <= r; k++) acc += A[o + clamp(k, 0, W - 1)];
+      for (let i = 0; i < W; i++) { tmp[i] = acc / n; acc += A[o + Math.min(i + r + 1, W - 1)] - A[o + Math.max(i - r, 0)]; }
+      for (let i = 0; i < W; i++) A[o + i] = tmp[i];
+    }
+    for (let i = 0; i < W; i++) {
+      let acc = 0;
+      for (let k = -r; k <= r; k++) acc += A[clamp(k, 0, H - 1) * W + i];
+      for (let j = 0; j < H; j++) { tmp[j] = acc / n; acc += A[Math.min(j + r + 1, H - 1) * W + i] - A[Math.max(j - r, 0) * W + i]; }
+      for (let j = 0; j < H; j++) A[j * W + i] = tmp[j];
+    }
+  }
+}
 function cameraZ() { return S.heightRef === 'amsl' ? +S.camHeight : (D ? D.elev(S.lat, S.lon) : 0) + (+S.camHeight); }
 let pendingReload = false, pendingOpts = null;
 
@@ -1552,6 +1586,12 @@ async function loadData(opts = {}) {
       T[j * W + i] = v;
     }
     prov.terrainCover = { pri: nPri / (W * H), fb: nFb / (W * H), none: nNone / (W * H) };
+    // Global DEMs are ~30 m grids with metre-level noise (bilinear upsampling keeps the noise as bumps).
+    // A separable box blur applied twice (≈ triangular kernel) removes it before any accurate imports override.
+    const smR = Math.round((+S.terrainSmooth || 0) / (2 * cell));
+    if (smR >= 1) smoothGrid(T, W, H, Math.min(smR, 60));
+    prov.smooth = smR >= 1 ? (2 * smR + 1) * cell : 0;
+    const tAcc = new Uint8Array(W * H);   // 1 = elevation from an imported (accurate) DTM/DSM, never relaxed
     if (nNone > 0 && S.terrainSource !== 'none') warnings.push(`${Math.round(100 * nNone / (W * H))}% of the area has no terrain data (set to 0 m).`);
 
     // imports: GeoTIFF elevation
@@ -1562,8 +1602,8 @@ async function loadData(opts = {}) {
         setStatus(`Reading ${rec.name}…`, true);
         const g = await geotiffToGrid(rec, G);
         if (!g) { prov.imports.push({ name: rec.name, note: 'outside this area' }); continue; }
-        if (rec.mode === 'dtm') { for (let i = 0; i < T.length; i++) { const v = g.grid[i]; if (v === v) T[i] = v; } }
-        else { if (!dsm) dsm = new Float32Array(W * H).fill(NaN); for (let i = 0; i < dsm.length; i++) { const v = g.grid[i]; if (v === v && !(dsm[i] >= v)) dsm[i] = v; } }
+        if (rec.mode === 'dtm') { for (let i = 0; i < T.length; i++) { const v = g.grid[i]; if (v === v) { T[i] = v; tAcc[i] = 1; } } }
+        else { if (!dsm) dsm = new Float32Array(W * H).fill(NaN); for (let i = 0; i < dsm.length; i++) { const v = g.grid[i]; if (v === v) { tAcc[i] = 1; if (!(dsm[i] >= v)) dsm[i] = v; } } }
         prov.imports.push({ name: rec.name, note: `${rec.mode.toUpperCase()} · ${g.code} · covers ${(g.hits * cell * cell / 1e4).toFixed(2)} ha here${rec.zoff ? ` · offset ${rec.zoff} m` : ''}` });
       } catch (err) { warnings.push(`${rec.name}: ${err.message}`); prov.imports.push({ name: rec.name, note: 'error' }); }
     }
@@ -1587,6 +1627,8 @@ async function loadData(opts = {}) {
         const gid = 'o' + (f.id ?? Math.random());
         const p = polyFromLatLonRings(f.rings, lat0, lon0, { id: gid + ':' + (groups.has(gid) ? groups.get(gid).length : 0), group: gid, origin: 'overture', kind: f.part ? 'part' : 'building', tags: f.props });
         if (!inArea(p)) continue;
+        { const t = f.props, mh = num(t.min_height), cl = String(t.class || t.subtype || '').toLowerCase();
+          p.raised = cl === 'roof' || cl === 'carport' || cl === 'canopy' || (mh != null && mh >= 2.5) || (num(t.min_floor) || 0) >= 1; if (mh != null) p.minH = mh; }
         if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(p);
       }
       const osmOK = !!(S.useOSM && osm && !osm.error);
@@ -1626,7 +1668,7 @@ async function loadData(opts = {}) {
     }
 
     for (const p of obstaclePolys(lat0, lon0)) polys.push(p);
-    D = Object.assign(G, { T, elev, elevLocal, warnings, polys, groupBase, dsm, prov, hasTerrain: nPri + nFb > 0, rasterKey: null, Sf: null, kind: null, loadedAt: Date.now() });
+    D = Object.assign(G, { T, tAcc, elev, elevLocal, warnings, polys, groupBase, dsm, prov, hasTerrain: nPri + nFb > 0, rasterKey: null, Sf: null, kind: null, loadedAt: Date.now() });
     const [sLat, wLon] = localToLonLat(G.xmin, G.ymax - H * cell, lat0, lon0), [nLat, eLon] = localToLonLat(G.xmin + W * cell, G.ymax, lat0, lon0);
     D.bounds = L.latLngBounds([sLat, wLon], [nLat, eLon]);
     assignHeights();
@@ -1781,6 +1823,7 @@ function computeViewshed(O) {
   const nSteps = Math.ceil(maxD / step);
   const near = O.near, far = O.far;
   const wantLos = S.showLos;
+  const tol = Math.max(0, +S.terrainTol || 0), acc = D.tAcc;
   let inCount = 0;
   for (let k = 0; k < nRays; k++) {
     const a = k / nRays * 2 * Math.PI;
@@ -1812,7 +1855,10 @@ function computeViewshed(O) {
           if ((out[idx] & 7) < 2) out[idx] = code; else out[idx] |= (code & 8);
           inCount++;
         } else if (wantLos && out[idx] === 0) out[idx] = 1;
-        Hs = top;
+        // bare terrain from a global DEM only raises the horizon by its height minus the error tolerance,
+        // so metre-level DEM noise on a flat street does not hide what lies behind it
+        if (tol && !kd && !(acc && acc[idx])) { const hz = top - tol / d; if (hz > Hs) Hs = hz; }
+        else Hs = top;
       }
       if (!wantLos && Hs > thi) break;   // nothing further can enter the frame
     }
@@ -1830,6 +1876,8 @@ function computeShadows(sun) {
   const tanA = Math.tan(sun.alt * D2R);
   const dc = Math.sin(sun.az * D2R), dr = -Math.cos(sun.az * D2R); // grid direction towards the sun
   const SH = new Float32Array(W * H);
+  const tol = Math.max(0, +S.terrainTol || 0), kind = D.kind, acc = D.tAcc;
+  const cast = (idx, h) => (tol && !kind[idx] && !(acc && acc[idx])) ? h - tol : h;
   if (Math.abs(dc) >= Math.abs(dr)) {
     const sx = dc > 0 ? 1 : -1, frac = dr / Math.abs(dc), dist = cell / Math.abs(dc), drop = dist * tanA;
     const start = sx > 0 ? W - 1 : 0, end = sx > 0 ? -1 : W;
@@ -1844,7 +1892,7 @@ function computeShadows(sun) {
           else if (r1 >= 0 && r1 < H) up = SH[r1 * W + cu];
         }
         const sv = up - drop;
-        if (sv > h + 0.05) { sh[idx] = 1; SH[idx] = sv; } else SH[idx] = h;
+        if (sv > h + 0.05) { sh[idx] = 1; SH[idx] = Math.max(sv, cast(idx, h)); } else SH[idx] = cast(idx, h);
       }
     }
   } else {
@@ -1861,7 +1909,7 @@ function computeShadows(sun) {
           else if (c1 >= 0 && c1 < W) up = SH[ru * W + c1];
         }
         const sv = up - drop;
-        if (sv > h + 0.05) { sh[idx] = 1; SH[idx] = sv; } else SH[idx] = h;
+        if (sv > h + 0.05) { sh[idx] = 1; SH[idx] = Math.max(sv, cast(idx, h)); } else SH[idx] = cast(idx, h);
       }
     }
   }
@@ -1970,7 +2018,7 @@ function compute() {
   const ms = localMsFromInput(S.datetime, +S.utcOffset);
   const sun = sunPosition(ms, S.lat, S.lon);
   updateHostInfo();
-  if (!D) { updateHud(O, null, sun); return; }
+  if (!D) { placeHandles(O); updateHud(O, null, sun); return; }
   const [cx, cy] = lonLatToLocal(S.lat, S.lon, D.lat0, D.lon0);
   if (Math.hypot(cx, cy) + +S.maxDist > D.radius - 2 && !loading) { loadData(); }
   const t0 = performance.now();
@@ -1978,13 +2026,14 @@ function compute() {
   const bk = D.rasterKey + '|' + S.showBuildings;
   if (rasterChanged || D.bldDrawn !== bk) { drawBuildings(); D.bldDrawn = bk; }
   if (S.showShadows) {
-    const key = D.rasterKey + '|' + sun.az.toFixed(3) + '|' + sun.alt.toFixed(3);
+    const key = D.rasterKey + '|' + sun.az.toFixed(3) + '|' + sun.alt.toFixed(3) + '|' + S.terrainTol;
     if (D.shadowKey !== key) { D.shadow = computeShadows(sun); D.shadowKey = key; drawShadows(D.shadow); }
   } else if (D.shadowKey !== 'off') { drawShadows(null); D.shadowKey = 'off'; }
   const V = computeViewshed(O);
   drawView(V.out);
   lastResult = { O, V, sun };
   drawVectors(O, V, sun);
+  placeHandles(O);
   updateHud(O, V, sun);
   afterCompute(O, V, sun);
   const dt = performance.now() - t0;
@@ -2059,7 +2108,7 @@ refreshModes();
 FOCALS.forEach(f => { const b = document.createElement('button'); b.textContent = f; b.onclick = () => { S.focal = f; scheduleCompute(); }; $('focalChips').appendChild(b); });
 [['Eye 1.6', 1.6], ['Low 0.5', 0.5], ['Ladder 3', 3], ['Crane 8', 8], ['Drone 50', 50], ['Drone 120', 120]].forEach(([t, v]) => { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { S.heightRef = 'agl'; S.camHeight = v; scheduleCompute(); }; $('heightChips').appendChild(b); });
 
-const NUM_FIELDS = ['camHeight', 'customW', 'customH', 'focal', 'focus', 'heading', 'tilt', 'roll', 'aimHeight', 'declination', 'utcOffset', 'maxDist', 'levelH', 'defaultH', 'woodH', 'treeH'];
+const NUM_FIELDS = ['camHeight', 'customW', 'customH', 'focal', 'focus', 'heading', 'tilt', 'roll', 'aimHeight', 'declination', 'utcOffset', 'maxDist', 'levelH', 'defaultH', 'woodH', 'treeH', 'terrainSmooth', 'terrainTol'];
 const SEL_FIELDS = ['heightRef', 'camera', 'mode', 'squeeze', 'aspect', 'mult', 'tstop', 'cellMode'];
 const CHK_FIELDS = ['excludeHost', 'breathing', 'aimTilt', 'showShadows', 'showSun', 'useWoods', 'useTrees', 'useRaised', 'showDof', 'showLos', 'showBuildings', 'showWedge'];
 const focusToSlider = v => Math.round(Math.log(clamp(v, 0.3, 3000) / 0.3) / Math.log(10000) * 1000);
@@ -2077,7 +2126,7 @@ function syncUI() {
   if (document.activeElement !== $('camCoords')) $('camCoords').value = `${S.lat.toFixed(6)}, ${S.lon.toFixed(6)}`;
   const ll = camMarker.getLatLng(); if (Math.abs(ll.lat - S.lat) > 1e-9 || Math.abs(ll.lng - S.lon) > 1e-9) camMarker.setLatLng([S.lat, S.lon]);
 }
-const NEEDS_RELOAD = new Set(['maxDist', 'cellMode']);
+const NEEDS_RELOAD = new Set(['maxDist', 'cellMode', 'terrainSmooth']);
 const NEEDS_HEIGHTS = new Set(['levelH', 'defaultH', 'woodH', 'treeH']);
 function onChange(k) {
   if (k === 'camera') { S.mode = 0; refreshModes(); }
@@ -2136,18 +2185,104 @@ function moveCamera(lat, lon, pan) {
 camMarker.on('drag', e => { const ll = e.target.getLatLng(); S.lat = ll.lat; S.lon = ll.lng; scheduleCompute(); });
 camMarker.on('dragend', () => loadData(false));
 
+/* =====================================================================
+   On-map handles (camera drag · focal/turn dot · aim/focus ring)
+   The focal dot sits on the lens axis; its distance from the camera on screen encodes the focal length
+   (log scale, wider lens = closer). The aim ring sits on the focus arc.
+   ===================================================================== */
+const F_MIN = 8, F_MAX = 400;
+function handleGeom() {
+  const sz = map.getSize(), maxPx = Math.max(120, 0.42 * Math.min(sz.x, sz.y)), minPx = 46;
+  return { minPx, maxPx };
+}
+function focalToPx(f) { const { minPx, maxPx } = handleGeom(); const t = Math.log(clamp(f, F_MIN, F_MAX) / F_MIN) / Math.log(F_MAX / F_MIN); return minPx + (maxPx - minPx) * t; }
+function pxToFocal(px) { const { minPx, maxPx } = handleGeom(); const t = clamp((px - minPx) / (maxPx - minPx), 0, 1); return F_MIN * Math.pow(F_MAX / F_MIN, t); }
+function snapFocal(f) {
+  let set = null; try { set = LENS_SETS.find(l => l.id === S.lensSet) || null; } catch (e) {}
+  if (set && set.id !== 'generic') return set.f.reduce((a, b) => Math.abs(Math.log(b / f)) < Math.abs(Math.log(a / f)) ? b : a);
+  // generic / zoom: snap to a common focal length when close, otherwise 1 mm (5 mm above 100 mm)
+  const near = FOCALS.find(x => Math.abs(Math.log(x / f)) < 0.025);
+  if (near) return near;
+  return f < 100 ? Math.round(f) : Math.round(f / 5) * 5;
+}
+function axisDir() {   // unit screen vector of the lens axis
+  const c = map.latLngToContainerPoint([S.lat, S.lon]), p = map.latLngToContainerPoint(destPoint(S.lat, S.lon, S.heading, 50));
+  const dx = p.x - c.x, dy = p.y - c.y, n = Math.hypot(dx, dy) || 1; return { c, ux: dx / n, uy: dy / n };
+}
+const hIcon = (cls) => L.divIcon({ className: '', html: `<div class="vf-h ${cls}"><div class="dot"></div><div class="lbl"></div></div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+const focalHandle = L.marker([S.lat, S.lon], { icon: hIcon('focal'), draggable: true, zIndexOffset: 1200, keyboard: false, autoPan: false }).addTo(map);
+const aimHandle = L.marker([S.lat, S.lon], { icon: hIcon('aim'), draggable: true, zIndexOffset: 1100, keyboard: false, autoPan: false }).addTo(map);
+const hdlLayer = L.layerGroup().addTo(map);
+let dragging = null;
+function setLbl(m, txt, side, ux, uy) {   // label beside the dot, perpendicular to the lens axis (focal on one side, aim on the other)
+  const el = m.getElement(); if (!el) return; const l = el.querySelector('.lbl'); l.textContent = txt;
+  const w = l.offsetWidth || 60, h = l.offsetHeight || 16;
+  let px = -uy * side, py = ux * side; if (py > 0.2 || (Math.abs(py) <= 0.2 && px < 0)) { px = -px; py = -py; } if (side < 0) { px = -px; py = -py; }
+  const r = 20 + Math.abs(px) * w / 2 + Math.abs(py) * h / 2;
+  l.style.left = (22 + px * r) + 'px'; l.style.top = (22 + py * r) + 'px';
+}
+function placeHandles(O) {
+  if (!map._loaded) return;
+  O = O || (lastResult && lastResult.O) || computeOptics();
+  const { c, ux, uy } = axisDir();
+  const fpx = focalToPx(+S.focal * (+S.mult || 1));
+  if (dragging !== 'focal') focalHandle.setLatLng(map.containerPointToLatLng([c.x + ux * fpx, c.y + uy * fpx]));
+  setLbl(focalHandle, `${+(+S.focal).toFixed(1)} mm${+S.mult !== 1 ? ' ×' + S.mult : ''} · ${O.hfov.toFixed(0)}°`, 1, ux, uy);
+  // aim ring at the horizontal focus distance, kept on screen and beyond the focal dot
+  const fh = Math.max(0.1, O.focus * Math.cos(S.tilt * D2R));
+  const pf = map.latLngToContainerPoint(destPoint(S.lat, S.lon, S.heading, fh));
+  let apx = Math.hypot(pf.x - c.x, pf.y - c.y), clampd = false;
+  const sz = map.getSize(), lim = Math.max(fpx + 40, 0.47 * Math.hypot(sz.x, sz.y));
+  if (apx > lim) { apx = lim; clampd = true; }
+  else if (Math.abs(apx - fpx) < 34) { apx = apx < fpx && fpx - 34 > 30 ? fpx - 34 : fpx + 34; clampd = true; }   // don't sit on the focal dot
+  else if (apx < 30) { apx = 30; clampd = true; }
+  if (dragging !== 'aim') aimHandle.setLatLng(map.containerPointToLatLng([c.x + ux * apx, c.y + uy * apx]));
+  const ae = aimHandle.getElement(); if (ae) ae.firstChild.classList.toggle('clamped', clampd);
+  setLbl(aimHandle, `focus ${fmtDist(O.focus)}${clampd && dragging !== 'aim' ? (apx === lim ? ' ↗' : ' ≈') : ''}`, -1, ux, uy);
+  // faint rotation arc through the focal dot
+  hdlLayer.clearLayers();
+  const rM = map.distance([S.lat, S.lon], focalHandle.getLatLng());
+  if (rM > 0) { const pts = []; for (let a = -40; a <= 40; a += 4) pts.push(destPoint(S.lat, S.lon, norm360(S.heading + a), rM)); L.polyline(pts, { color: '#ff8a1e', weight: 1.5, opacity: 0.55, dashArray: '2 5', interactive: false }).addTo(hdlLayer); }
+}
+focalHandle.on('dragstart', () => { dragging = 'focal'; });
+focalHandle.on('drag', e => {
+  const ll = e.target.getLatLng();
+  const c = map.latLngToContainerPoint([S.lat, S.lon]), p = map.latLngToContainerPoint(ll);
+  const px = Math.hypot(p.x - c.x, p.y - c.y);
+  if (px < 12) return;
+  S.heading = +bearing(S.lat, S.lon, ll.lat, ll.lng).toFixed(1);
+  const f = snapFocal(pxToFocal(px) / (+S.mult || 1));
+  if (f !== +S.focal) { S.focal = f; if (typeof renderLensChips === 'function') renderLensChips(); }
+  scheduleCompute();
+});
+focalHandle.on('dragend', () => { dragging = null; placeHandles(); });
+aimHandle.on('dragstart', () => { dragging = 'aim'; });
+aimHandle.on('drag', e => {
+  const ll = e.target.getLatLng();
+  const d = haversine(S.lat, S.lon, ll.lat, ll.lng); if (d < 0.3) return;
+  aimAt(ll.lat, ll.lng);   // heading + tilt (towards aim height when "tilt follows aim" is on)
+  S.focus = +Math.max(0.3, d / Math.max(0.05, Math.cos(S.tilt * D2R))).toFixed(d < 20 ? 2 : 1);
+  scheduleCompute();
+});
+aimHandle.on('dragend', () => { dragging = null; placeHandles(); });
+camMarker.on('drag', () => placeHandles());
+map.on('zoomend moveend resize', () => placeHandles());
+// first-run hint
+try { if (!localStorage.getItem('vfm.hint.handles')) $('handleHint').style.display = 'flex'; } catch (e) {}
+$('hintOk').onclick = () => { $('handleHint').style.display = 'none'; try { localStorage.setItem('vfm.hint.handles', '1'); } catch (e) {} };
+
 /* Tools */
-let tool = 'aim';
+let tool = null;
 function setTool(t) {
-  tool = t; document.querySelectorAll('#toolbar [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t)); map.getContainer().style.cursor = t === 'inspect' ? 'help' : 'crosshair';
+  if (t && t === tool && t !== 'obstacle') t = null;   // clicking the active tool switches it off
+  tool = t; document.querySelectorAll('#toolbar [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t)); map.getContainer().style.cursor = !t ? '' : t === 'inspect' ? 'help' : 'crosshair';
   if (t === 'obstacle') { map.doubleClickZoom.disable(); setStatus('Obstacle: click the corners on the map, then click the first corner to finish. Esc cancels.'); } else { map.doubleClickZoom.enable(); if (window.__clearDraw) window.__clearDraw(); }
 }
 document.querySelectorAll('#toolbar [data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
-setTool('aim');
+setTool(null);
 map.on('click', e => {
   const { lat, lng } = e.latlng;
-  if (tool === 'camera') { moveCamera(lat, lng, false); return; }
-  if (tool === 'aim') { aimAt(lat, lng); return; }
+  if (tool === 'camera') { moveCamera(lat, lng, false); setTool(null); return; }
   if (tool === 'inspect') { inspect(lat, lng); return; }
   if (tool === 'obstacle') { obstacleClick(lat, lng, e); }
 });
@@ -2167,7 +2302,6 @@ function aimAt(lat, lon) {
     const camZ = cameraZ();
     if (d > 0.1) S.tilt = +(Math.atan2(tgtZ - camZ, d) * R2D).toFixed(2) || 0;
   }
-  if (!tgtMarker) tgtMarker = L.marker([lat, lon], { icon: tgtIcon, interactive: false, keyboard: false }).addTo(map); else tgtMarker.setLatLng([lat, lon]);
   scheduleCompute();
 }
 function inspect(lat, lon) {
@@ -3078,7 +3212,7 @@ renderObstacles();
   await loadImports();
   loadData({ rebuild: true }).catch(err => setStatus('Load failed: ' + err.message));
 })();
-window.__vfm = { V3, moonPosition, shareURL, applyShareHash, getShots, setShots, withState, S, KEYS, get D() { return D; }, computeOptics, frameElevInterval, cameraBasis, sunPosition, computeViewshed, computeShadows, compute, loadData, decodeMVT, Cache, getProj, get imgStats() { return imgStats; } };
+window.__vfm = { get lastResult() { return lastResult; }, smoothGrid, placeHandles, V3, moonPosition, shareURL, applyShareHash, getShots, setShots, withState, S, KEYS, get D() { return D; }, computeOptics, frameElevInterval, cameraBasis, sunPosition, computeViewshed, computeShadows, compute, loadData, decodeMVT, Cache, getProj, get imgStats() { return imgStats; } };
 </script>
 </body>
 </html>
