@@ -96,6 +96,9 @@
   .vf-h .lbl.left{left:auto;right:36px}
   .vf-h .lbl{left:22px;top:22px;transform:translate(-50%,-50%)}
   .vf-h.aim .lbl{color:#7ff}
+  .vf-h.sun .dot{background:#ffd400;border-color:#fff;left:11px;top:11px;width:22px;height:22px;box-shadow:0 0 0 1px #000,0 0 10px 3px rgba(255,212,0,.55)}
+  .vf-h.sun.night .dot{background:#556;box-shadow:0 0 0 1px #000}
+  .vf-h.sun .lbl{color:#ffe680}
   .vf-cam{position:relative;width:40px;height:40px;margin:-20px 0 0 -20px;cursor:move;touch-action:none}
   .vf-cam .camicon{position:absolute;left:8px;top:9px}
   #handleHint{position:absolute;left:0;right:0;margin:0 auto;width:max-content;bottom:60px;z-index:1000;background:rgba(15,17,20,.92);border:1px solid var(--line);color:#eee;font-size:12px;padding:6px 10px 6px 12px;border-radius:16px;display:flex;gap:10px;align-items:center;max-width:92%}
@@ -373,7 +376,7 @@
 
 <div id="mapwrap">
   <div id="map" tabindex="0"></div>
-  <div id="handleHint" style="display:none"><span>Drag <b>🎥</b> to move · drag <b style="color:#ff8a1e">●</b> to turn &amp; change focal length · drag <b style="color:#00e5e5">◎</b> to aim &amp; focus</span><button id="hintOk">Got it</button></div>
+  <div id="handleHint" style="display:none"><span>Drag <b>🎥</b> to move · drag <b style="color:#ff8a1e">●</b> to turn &amp; change focal length · drag <b style="color:#00e5e5">◎</b> to aim &amp; focus · drag <b style="color:#ffd400">☀</b> along its path to change the time</span><button id="hintOk">Got it</button></div>
   <div id="toolbar">
     <button data-tool="camera" title="Click the map to drop the camera there (or just drag the camera)">📷 Place</button>
     <button data-tool="inspect" title="Click to inspect a point or building">🔍 Inspect</button>
@@ -1999,10 +2002,8 @@ function drawVectors(O, V, sun) {
     }
   }
   if (S.showSun && sun && sun.alt > -6) {
-    const p = destPoint(S.lat, S.lon, sun.az, +S.maxDist * 0.6);
+    const p = sunHandlePos(sun);
     L.polyline([[S.lat, S.lon], p], { color: '#ffd400', weight: 2, opacity: 0.9, interactive: false }).addTo(vecLayer);
-    L.circleMarker(p, { radius: 6, color: '#ffd400', fillColor: '#ffd400', fillOpacity: 0.9, interactive: false }).addTo(vecLayer)
-      .bindTooltip(`☀ ${sun.az.toFixed(1)}° / ${sun.alt.toFixed(1)}°`, { permanent: true, direction: 'right', className: '' });
   }
 }
 
@@ -2018,7 +2019,7 @@ function compute() {
   const ms = localMsFromInput(S.datetime, +S.utcOffset);
   const sun = sunPosition(ms, S.lat, S.lon);
   updateHostInfo();
-  if (!D) { placeHandles(O); updateHud(O, null, sun); return; }
+  if (!D) { placeHandles(O); placeSunHandle(sun); updateHud(O, null, sun); return; }
   const [cx, cy] = lonLatToLocal(S.lat, S.lon, D.lat0, D.lon0);
   if (Math.hypot(cx, cy) + +S.maxDist > D.radius - 2 && !loading) { loadData(); }
   const t0 = performance.now();
@@ -2033,7 +2034,7 @@ function compute() {
   drawView(V.out);
   lastResult = { O, V, sun };
   drawVectors(O, V, sun);
-  placeHandles(O);
+  placeHandles(O); placeSunHandle(sun);
   updateHud(O, V, sun);
   afterCompute(O, V, sun);
   const dt = performance.now() - t0;
@@ -2266,7 +2267,40 @@ aimHandle.on('drag', e => {
 });
 aimHandle.on('dragend', () => { dragging = null; placeHandles(); });
 camMarker.on('drag', () => placeHandles());
-map.on('zoomend moveend resize', () => placeHandles());
+
+/* Sun handle: sits on today's sun path (same radius rule as the path), drag it along the path to scrub the time of day */
+function sunPathR() { return Math.min(+S.maxDist * 0.55, 450); }
+function sunHandlePos(sun) { return destPoint(S.lat, S.lon, sun.az, sunPathR() * Math.cos(Math.max(0, sun.alt) * D2R)); }
+const sunHandle = L.marker([S.lat, S.lon], { icon: hIcon('sun'), draggable: true, zIndexOffset: 1050, keyboard: false, autoPan: false, title: 'Drag along the sun path to change the time of day' });
+let sunDayTab = null;
+function placeSunHandle(sun) {
+  const show = S.showSun && sun && sun.alt > -6;
+  if (!show) { if (map.hasLayer(sunHandle)) map.removeLayer(sunHandle); return; }
+  if (!map.hasLayer(sunHandle)) sunHandle.addTo(map);
+  if (dragging !== 'sun') sunHandle.setLatLng(sunHandlePos(sun));
+  const el = sunHandle.getElement(); if (el) el.firstChild.classList.toggle('night', sun.alt <= 0);
+  const t = (/T(\d{2}:\d{2})/.exec(S.datetime) || [])[1] || '';
+  const c = map.latLngToContainerPoint([S.lat, S.lon]), q = map.latLngToContainerPoint(sunHandle.getLatLng());
+  const dx = q.x - c.x, dy = q.y - c.y, n = Math.hypot(dx, dy) || 1;
+  if (el) { const l = el.querySelector('.lbl'); l.textContent = `☀ ${t} · ${sun.alt.toFixed(0)}°`;   // label on the inner side (towards the camera) so it stays on screen
+    const ux = dx / n, uy = dy / n, r = 22 + Math.abs(ux) * (l.offsetWidth || 70) / 2 + Math.abs(uy) * (l.offsetHeight || 16) / 2;
+    l.style.left = (22 - ux * r) + 'px'; l.style.top = (22 - uy * r) + 'px'; }
+}
+sunHandle.on('dragstart', () => {
+  dragging = 'sun';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(S.datetime); const base = Date.UTC(+m[1], +m[2] - 1, +m[3]) - S.utcOffset * 3600000;
+  sunDayTab = []; for (let i = 0; i < 1440; i++) { const p = sunPosition(base + i * 60000, S.lat, S.lon); if (p.alt > -6) sunDayTab.push([i, p.az]); }
+});
+sunHandle.on('drag', e => {
+  if (!sunDayTab || !sunDayTab.length) return;
+  const ll = e.target.getLatLng(); if (haversine(S.lat, S.lon, ll.lat, ll.lng) < 0.5) return;
+  const b = bearing(S.lat, S.lon, ll.lat, ll.lng);
+  let best = null, bd = 1e9; for (const [i, az] of sunDayTab) { const d = Math.abs(((az - b + 540) % 360) - 180); if (d < bd) { bd = d; best = i; } }
+  const day = S.datetime.slice(0, 10), v = `${day}T${String(Math.floor(best / 60)).padStart(2, '0')}:${String(best % 60).padStart(2, '0')}`;
+  if (v !== S.datetime) setDatetime(v);
+});
+sunHandle.on('dragend', () => { dragging = null; sunDayTab = null; scheduleCompute(); });
+map.on('zoomend moveend resize', () => { placeHandles(); if (lastResult) placeSunHandle(lastResult.sun); });
 // first-run hint
 try { if (!localStorage.getItem('vfm.hint.handles')) $('handleHint').style.display = 'flex'; } catch (e) {}
 $('hintOk').onclick = () => { $('handleHint').style.display = 'none'; try { localStorage.setItem('vfm.hint.handles', '1'); } catch (e) {} };
