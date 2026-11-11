@@ -1114,7 +1114,7 @@ async function loadOSM(bb, radius, refresh) {
   let T = tilesFor(bb, z);
   while (T.list.length > 16 && z > 10) { z--; T = tilesFor(bb, z); }
   const seen = new Map(); let oldestBase = null, stale = 0, cachedN = 0, failed = 0, oldestT = Date.now(), servers = new Set();
-  await pool(T.list, 3, async ([x, y]) => {
+  await pool(T.list, 2, async ([x, y]) => {
     const tb = { w: tileX2lon(x, z), e: tileX2lon(x + 1, z), n: tileY2lat(y, z), s: tileY2lat(y + 1, z) };
     try {
       const veg = !!(S.useWoods || S.useTrees);
@@ -1516,13 +1516,22 @@ async function loadData(opts = {}) {
     setStatus(`${refresh ? 'Re-downloading' : 'Loading'} scene data for ${fmtDist(radius)} radius…` + (radius > 3000 ? ' Large areas can take a minute.' : ''), true);
     const TS = terrainSources();
     const wantOSM = S.useOSM, wantOVT = S.useOverture;
-    const [osm, ovt, tPri, tFb] = await Promise.all([
-      wantOSM ? loadOSM(bb, radius, refresh).catch(err => ({ error: err })) : null,
+    const osmP = wantOSM ? loadOSM(bb, radius, refresh).catch(err => ({ error: err })) : Promise.resolve(null);
+    const [ovt, tPri, tFb] = await Promise.all([
       wantOVT ? loadOverture(bb, refresh).catch(err => ({ error: err })) : null,
       loadTerrainSource(TS[S.terrainSource], bb, cell, refresh).catch(err => ({ error: err })),
       (S.terrainFallback && S.terrainFallback !== 'none' && S.terrainFallback !== S.terrainSource) ? loadTerrainSource(TS[S.terrainFallback], bb, cell, refresh).catch(err => ({ error: err })) : null,
     ]);
     if (token !== loadToken) return;
+    // OpenStreetMap via the public Overpass servers can take minutes on a first visit. Give it a moment
+    // (cache hits are instant), otherwise show the scene with Overture buildings now and merge OSM detail when it arrives.
+    let osm = await Promise.race([osmP, new Promise(r => setTimeout(() => r('pending'), 3000))]);
+    if (token !== loadToken) return;
+    if (osm === 'pending') {
+      osm = null; prov.osmPending = true;
+      warnings.push('⏳ OpenStreetMap detail is still downloading (public Overpass servers are slow right now). Showing Overture buildings meanwhile; OSM merges in automatically.');
+      osmP.then(() => { if (D && D.prov && D.prov.osmPending && D.lat0 === lat0 && D.lon0 === lon0) loadData({ rebuild: true }); });
+    }
     prov.osm = osm; prov.ovt = ovt; prov.tPri = tPri; prov.tFb = tFb;
     if (osm && osm.error) warnings.push('OSM: ' + osm.error.message);
     if (ovt && ovt.error) warnings.push('Overture: ' + ovt.error.message);
@@ -1658,6 +1667,7 @@ function updateDataStats() {
   }
   // OSM
   if (!S.useOSM) h.push(srcLine('off', 'OpenStreetMap', 'off'));
+  else if (P.osmPending) h.push(srcLine('warn', 'OpenStreetMap', 'still downloading… will merge in automatically'));
   else if (!P.osm || P.osm.error) h.push(srcLine('bad', 'OpenStreetMap', P.osm && P.osm.error ? P.osm.error.message : 'not loaded'));
   else {
     const o = P.osm;
